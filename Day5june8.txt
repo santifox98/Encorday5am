@@ -8,10 +8,11 @@ and allow Telnet and SSH + Task 3. Virtual terminal Exec
 sessions should timeout after 5 minutes of inactivity
 
 config t
+!username SuperAdmin privilege 15 secret password SuperUser
 username SuperAdmin privilege 15 password SuperUser
 line vty 0 4
  login local
- transport input telnet ssh
+ transport input ssh
  exec-timeout 5 0
 
 5.1.a Lines and local user authentication
@@ -92,7 +93,7 @@ sw1:
 config t
 aaa new-model
 username admin password pass
-radius-server host 192.168.8.8 key secret
+radius-server host 10.31.1.7 key secret
 ip radius source-interface vlan 1
 aaa authorization exec default group radius
 aaa authentication login default group radius local
@@ -108,8 +109,8 @@ aaa authentication dot1x default group radius
 aaa authorization network default group radius
 aaa accounting dot1x default start-stop group radius
 dot1x system-auth-control
-radius-server host 192.168.8.8 auth-port 1812 acct-port 1813 key secret
-int fa 0/5
+radius-server host 10.31.1.7 auth-port 1812 acct-port 1813 key secret
+int fa 0/3
   switchport mode access
   authentication port-control auto
   dot1x port-control auto
@@ -277,7 +278,7 @@ config t
 !
 no time-range BLOCKSSH
 time-range BLOCKSSH
- periodic saturday 1:00 to 23:00
+ periodic saturday 11:22 to 11:23
  exit
 !
 no ip access-list extended 102
@@ -302,7 +303,7 @@ config t
 !
 no time-range BLOCKPING
 time-range BLOCKPING
- periodic saturday 1:23 to 1:24
+ periodic saturday 11:29 to 11:30
  exit
 !
 no ip access-list extended 103
