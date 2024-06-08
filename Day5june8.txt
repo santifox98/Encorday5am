@@ -1,0 +1,321 @@
+EncorDay5am:
+5.1 Configure and verify device access control
+
+local database is configured for the user “SuperAdmin” with pass
+“SuperUser” and with highest privilege
+the vty interfaces utilize the local user database for access
+and allow Telnet and SSH + Task 3. Virtual terminal Exec 
+sessions should timeout after 5 minutes of inactivity
+
+config t
+username SuperAdmin privilege 15 password SuperUser
+line vty 0 4
+ login local
+ transport input telnet ssh
+ exec-timeout 5 0
+
+5.1.a Lines and local user authentication
+5.1.b Authentication and authorization using AAA
+
+task1: create views:
+
+below shows you the ocmmands required to create a view
+mode. in all the exmaples use the SHOWMODE  and HELPDESK
+and view mode names, these could be changed to anything you 
+want. TO ACCESS THE root view(as admin) use the enable view:
+
+STEP1:
+enable view
+config t
+	aaa new-model
+	end
+	
+STEP2:
+enable view root
+pass
+show privilege
+config t
+	parser view HELPDESK
+	secret pass
+	commands exec include show version
+	commands exec include show ip interface brief
+	parser view TECHNICIAN
+	secret pass
+	commands exec include all show
+	commands exec include configure terminal
+	commands configure include ip route
+	commands configure include all interface
+	exit
+
+Before I assign the views to users, 
+I want to test the views by enabling them directly
+test HELPDESK view.
+
+telnet your router:
+enable view HELPDESK
+pass
+
+telnet your router x 2:
+enable view TECHNICIAN
+pass
+
+TO GET THE FOUT!
+
+enable
+pass
+
+STEP3:
+This behaves as expected. Now I'll assign the views
+directly to each user and test their access by accessing
+the router via telnet from another device.
+
+Since I'll be using telnet, I'll also have to authorize 
+the vty lines in order to apply the role based policies
+	
+	
+enable
+show privilege
+config t
+	username honey view HELPDESK password pass
+	username tess view TECHNICIAN password pass
+	aaa authorization exec default local
+	line vty 0 14
+	   authorization exec default
+end
+
+
+TASK2: CISCO RADIUS AUTHENTICATION:
+
+shell:priv-lvl=15
+
+sw1:
+config t
+aaa new-model
+username admin password pass
+radius-server host 192.168.8.8 key secret
+ip radius source-interface vlan 1
+aaa authorization exec default group radius
+aaa authentication login default group radius local
+line vty 0 14
+  login authentication default
+end
+
+TASK3: CONFIGURING 802.1X:
+
+config t
+aaa new-model
+aaa authentication dot1x default group radius
+aaa authorization network default group radius
+aaa accounting dot1x default start-stop group radius
+dot1x system-auth-control
+radius-server host 192.168.8.8 auth-port 1812 acct-port 1813 key secret
+int fa 0/5
+  switchport mode access
+  authentication port-control auto
+  dot1x port-control auto
+  spanning-tree portfast
+end
+
+
+TASK4: 
+
+config t
+  username rivan privilege 15 secret C1sc0123
+  ip http server
+  ip http secure-server
+  ip http authentication local
+  line vty 0 4
+    login local
+    transport input all
+    exit
+  int vlan 1
+    no shut
+    ip add 192.168.8.1 255.255.255.0
+end
+
+########################################################
+########################################################
+5.2 Configure and verify infrastructure security features
+5.2.a ACLs
+5.2.b CoPP
+########################################################
+########################################################
+
+Control Plane Policing:
+
+Task0: prevent icmp overload:
+config t
+ip access-list extended PING
+  permit icmp any any
+!
+class-map CMPING
+  match access-group name PING
+!
+no policy-map PMPING
+policy-map PMPING
+  class CMPING
+  !limit to 8bps and drop exceeding
+  police 8000 conform-action transmit exceed-action drop
+  exit
+!
+control-plane
+ service-policy input PMPING
+ exit
+do sh policy-map control-plane
+
+
+ANOTHERactual:
+
+config t
+no access-list 100
+access-list 100 permit icmp any any
+!
+no class-map ICMP
+class-map ICMP
+ match access-group 100
+ exit
+!
+no policy-map ICMP-POLICY
+policy-map ICMP-POLICY
+ class ICMP
+  police 8000 conform-action transmit exceed-action drop
+  exit
+ exit
+ exit
+!
+control-plane
+ service-policy input ICMP-POLICY
+ DO  sh policy-map control-plane
+
+
+
+TASK1: 
+pre-config:
+config t
+ip dns server
+ip finger
+ip http server
+ip http secure-server
+
+
+config t
+!ac
+ip access-list extended TELNET
+ permit tcp any any eq 23
+ exit
+ip access-list extended SSH
+ permit tcp any any eq 22
+ exit
+ip access-list extended ICMP
+ permit icmp any any
+ exit
+!cm
+class-map match-all CMTEL
+ match access-group name TELNET
+ exit
+class-map match-all CMSSH
+ match access-group name SSH
+ exit
+class-map match-all CMICMP
+ match access-group name ICMP
+ exit
+!PM
+policy-map PMCOPP
+ !pass ALL TELNET TRAFFIC
+ class CMTEL
+  police 8000 conform-action drop exceed-action drop
+ !limit ALL SSH TRAFFIC
+ class CMSSH
+  police 500000 conform-action transmit exceed-action transmit
+ !set ping at 10pps, confrom to transmit, exceed to drop
+ class CMICMP
+  police rate 10 pps conform-action transmit exceed-action drop
+
+class class-default
+ police 12000 conform-action transmit exceed-action transmit
+ exit
+!SP
+control-plane
+ service-policy input PMCOPP
+END
+show class-map
+show policy-map
+show policy-map control-plane
+
+TASK2:
+
+User
+write a cisco configuration for COPP that will totally block http 
+traffic but allow telnet and ssh traffic using one service-policy only
+
+config t
+! Define an access control list (ACL) to match HTTP traffic
+access-list 101 deny tcp any any eq 443
+access-list 101 permit ip any any
+
+! Create a class map to match the ACL
+class-map match-all HTTPS-Traffic
+  match access-group 101
+
+! Create a policy map for CoPP
+no policy-map Control-Plane-Policing
+policy-map Control-Plane-Policing
+  class HTTPS-Traffic
+    police 80000 1500 1500 conform-action transmit exceed-action drop violate-action drop
+    exit
+! Apply the CoPP policy to the control plane
+control-plane
+ service-policy input Control-Plane-Policing
+ exit
+
+
+&&&&&&&&&&finally1&&&&&&&&&&&&&&&&
+&&&&&&&&&&finally1&&&&&&&&&&&&&&&&
+&&&&&&&&&&finally1&&&&&&&&&&&&&&&&
+
+config t
+!
+no time-range BLOCKSSH
+time-range BLOCKSSH
+ periodic saturday 1:00 to 23:00
+ exit
+!
+no ip access-list extended 102
+ip access-list extended 102
+ deny tcp any any eq 22 time-range BLOCKSSH
+ deny tcp any any eq 79 time-range BLOCKSSH
+ permit ip any any
+!
+interface GigabitEthernet1
+ ip access-group 102 in
+end
+Extended IP access list 102
+    10 deny tcp any any eq 22 time-range BLOCKSSH (active) (5 matches)
+    20 deny tcp any any eq finger time-range BLOCKSSH (active) (4 matches)
+    30 permit ip any any (87 matches)
+
+&&&&&&&&&&finally2&&&&&&&&&&&&&&&&
+&&&&&&&&&&finally2&&&&&&&&&&&&&&&&
+&&&&&&&&&&finally2&&&&&&&&&&&&&&&&
+
+config t
+!
+no time-range BLOCKPING
+time-range BLOCKPING
+ periodic saturday 1:23 to 1:24
+ exit
+!
+no ip access-list extended 103
+ip access-list extended 103
+ deny ICMP any any  time-range BLOCKPING
+ permit ip any any
+!
+interface GigabitEthernet1
+ NO IP ACCESS-GROUP 102 in
+ ip access-group 103 out
+ ip access-group 103 in
+end
+
+c>ping 192.168.108.7 -t
+
+&&&&&&&&&&finally2&&&&&&&&&&&&&&&&
